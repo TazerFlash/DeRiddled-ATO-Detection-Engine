@@ -1,0 +1,324 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>De-Riddled: ATO Detection Engine</title>
+<meta name="description" content="Real-time account-takeover detection on 31M logins: calibrated XGBoost, a FastAPI scorer, shadow-mode evaluation, an analyst dashboard and an evaluated GenAI layer.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232563eb'/%3E%3Ctext x='16' y='22' font-size='17' text-anchor='middle' fill='white' font-family='sans-serif' font-weight='700'%3E%3F%3C/text%3E%3C/svg%3E">
+<style>
+:root {
+  --bg: #fbfbfa; --surface: #ffffff; --ink: #1a1c1f; --ink-2: #4a4f57; --muted: #6b717b;
+  --line: #e4e5e7; --accent: #2563eb; --accent-soft: #e8efff; --good: #15803d; --warn: #b45309;
+  --code: #f3f4f6; --on-accent: #ffffff; --shadow: 0 1px 2px rgba(0,0,0,.04), 0 4px 16px rgba(0,0,0,.04);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111317; --surface: #181b20; --ink: #e8e9eb; --ink-2: #b9bdc4; --muted: #8b919b;
+    --line: #2a2e35; --accent: #7aa2ff; --accent-soft: #1c2640; --good: #4ade80; --warn: #fbbf24;
+    --code: #1f232a; --on-accent: #0b1020; --shadow: none;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #111317; --surface: #181b20; --ink: #e8e9eb; --ink-2: #b9bdc4; --muted: #8b919b;
+  --line: #2a2e35; --accent: #7aa2ff; --accent-soft: #1c2640; --good: #4ade80; --warn: #fbbf24;
+  --code: #1f232a; --on-accent: #0b1020; --shadow: none;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+.wrap { max-width: 980px; margin: 0 auto; padding: 0 16px; }
+nav { position: sticky; top: 0; z-index: 5; background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); }
+nav .wrap { display: flex; gap: 20px; align-items: center; height: 52px; overflow-x: auto; white-space: nowrap; }
+nav .brand { font-weight: 700; color: var(--ink); margin-right: auto; }
+nav a.l { color: var(--ink-2); font-size: 14px; }
+header { padding: 64px 0 40px; }
+.eyebrow { color: var(--accent); font-weight: 600; font-size: 14px; letter-spacing: .02em; text-transform: uppercase; }
+h1 { font-size: clamp(32px, 6vw, 52px); line-height: 1.08; margin: 10px 0 16px; letter-spacing: -.02em; }
+.lede { font-size: clamp(17px, 2.2vw, 20px); color: var(--ink-2); max-width: 720px; margin: 0; }
+.cta { display: flex; gap: 12px; margin-top: 28px; flex-wrap: wrap; }
+.btn { display: inline-block; padding: 10px 18px; border-radius: 8px; font-weight: 600; font-size: 15px; border: 1px solid var(--line); color: var(--ink); background: var(--surface); }
+.btn.primary { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+.btn:hover { text-decoration: none; filter: brightness(1.05); }
+section { padding: 44px 0; border-top: 1px solid var(--line); }
+h2 { font-size: 26px; margin: 0 0 8px; letter-spacing: -.01em; }
+h3 { font-size: 18px; margin: 28px 0 8px; }
+.sub { color: var(--muted); margin: 0 0 24px; }
+p { margin: 0 0 14px; }
+.stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+.stat { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 18px; box-shadow: var(--shadow); }
+.stat .n { font-size: 30px; font-weight: 700; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.stat .k { color: var(--ink-2); font-size: 14px; line-height: 1.4; margin-top: 4px; }
+.note { background: var(--accent-soft); border-radius: 10px; padding: 14px 16px; color: var(--ink-2); font-size: 15px; }
+.tw { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); }
+table { border-collapse: collapse; width: 100%; font-size: 15px; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { color: var(--muted); font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: .03em; }
+tr:last-child td { border-bottom: 0; }
+td.num, th.num { text-align: right; white-space: nowrap; }
+tr.hl td { font-weight: 700; background: var(--accent-soft); }
+ul.clean { padding-left: 20px; margin: 0 0 14px; }
+ul.clean li { margin: 6px 0; }
+figure { margin: 20px 0; background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
+figure img { width: 100%; height: auto; display: block; }
+figcaption { color: #4a4f57; font-size: 14px; margin-top: 8px; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 18px; box-shadow: var(--shadow); }
+.card h3 { margin-top: 0; }
+.card p:last-child { margin-bottom: 0; }
+pre { background: var(--code); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; overflow-x: auto; font-size: 13px; line-height: 1.45; color: var(--ink); }
+code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .92em; }
+.tag { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 99px; border: 1px solid var(--line); color: var(--ink-2); }
+.tag.done { color: var(--good); border-color: color-mix(in srgb, var(--good) 40%, transparent); }
+.tag.todo { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 40%, transparent); }
+footer { padding: 36px 0 56px; color: var(--muted); font-size: 14px; border-top: 1px solid var(--line); }
+#theme { background: none; border: 1px solid var(--line); color: var(--ink-2); border-radius: 8px; padding: 4px 10px; font: inherit; font-size: 13px; cursor: pointer; }
+@media (max-width: 760px) {
+  .stats { grid-template-columns: 1fr 1fr; }
+  .grid2 { grid-template-columns: 1fr; }
+  header { padding: 40px 0 28px; }
+  nav a.l.opt { display: none; }
+}
+</style>
+</head>
+<body>
+<nav>
+  <div class="wrap">
+    <span class="brand">De-Riddled</span>
+    <a class="l" href="#results">Results</a>
+    <a class="l opt" href="#how">How it works</a>
+    <a class="l opt" href="#redteam">Red team</a>
+    <a class="l opt" href="#genai">GenAI</a>
+    <a class="l opt" href="#status">Status</a>
+    <a class="l" href="https://github.com/TazerFlash/DeRiddled-ATO-Detection-Engine">GitHub</a>
+    <button id="theme" type="button" aria-label="Toggle colour theme">Theme</button>
+  </div>
+</nav>
+
+<header>
+  <div class="wrap">
+    <div class="eyebrow">Real-time account-takeover detection</div>
+    <h1>Every impostor leaves a riddle in the logs.</h1>
+    <p class="lede">De-Riddled scores every login attempt for account-takeover risk and returns <strong>ALLOW</strong>, <strong>CHALLENGE</strong> (one-time code) or <strong>BLOCK</strong> in a few milliseconds, with the top three reasons. Built on 31 million logins, compared honestly against rules and statistics, served by a real API, and paired with a GenAI layer that briefs analysts, answers their questions and attacks the model.</p>
+    <div class="cta">
+      <a class="btn primary" href="https://github.com/TazerFlash/DeRiddled-ATO-Detection-Engine">View the code</a>
+      <a class="btn" href="#results">See the results</a>
+    </div>
+  </div>
+</header>
+
+<section id="results">
+  <div class="wrap">
+    <h2>Results</h2>
+    <p class="sub">Validation window, Aug–Sep 2020: 2.63M logins, 33 confirmed takeovers. Every policy decides every login, so the comparison is paired.</p>
+    <div class="stats">
+      <div class="stat"><div class="n">28 / 33</div><div class="k">takeovers stopped (rule baseline: 0)</div></div>
+      <div class="stat"><div class="n">0.051%</div><div class="k">of legitimate logins challenged</div></div>
+      <div class="stat"><div class="n">+39 pts</div><div class="k">recall over the best non-ML baseline at equal friction (CI 18–59)</div></div>
+      <div class="stat"><div class="n">2.3 ms</div><div class="k">p95 scoring latency, 349 logins/s, 0 fail-opens</div></div>
+    </div>
+
+    <h3>Shadow mode</h3>
+    <div class="tw"><table>
+      <thead><tr><th>Policy</th><th class="num">Legit challenged</th><th class="num">Takeovers stopped</th><th class="num">Cost / 1,000 logins</th></tr></thead>
+      <tbody>
+        <tr><td>Allow everything</td><td class="num">0</td><td class="num">0 / 33</td><td class="num">6.26</td></tr>
+        <tr><td>Rule: challenge after 5 failed passwords in an hour</td><td class="num">0.30%</td><td class="num">0 / 33</td><td class="num">7.77</td></tr>
+        <tr><td>Likelihood ratio (Freeman et al.), same budget</td><td class="num">0.052%</td><td class="num">15 / 33</td><td class="num">3.96</td></tr>
+        <tr class="hl"><td>De-Riddled</td><td class="num">0.051%</td><td class="num">28 / 33</td><td class="num">1.66</td></tr>
+      </tbody>
+    </table></div>
+    <ul class="clean">
+      <li>Exact McNemar test against the baseline: p = 0.001 (14 takeovers stopped only by the model, 1 only by the baseline). Confidence interval from a day-block bootstrap.</li>
+      <li>Ranked by risk, all 33 validation takeovers fall in the riskiest 1% of logins.</li>
+      <li>A full week (503,676 logins) replayed through the API gave decisions identical to the offline policy on all 307,562 real-account logins.</li>
+    </ul>
+    <div class="note"><strong>Headline still to come.</strong> The final test window (Oct–Nov 2020, 22 takeovers) has not been touched. The model and thresholds were chosen on validation, so these numbers are optimistic until that one-time test confirms them.</div>
+
+    <figure>
+      <img src="assets/rule_misses.png" alt="Bar chart: 88% of takeovers and 87% of legitimate logins have zero failed attempts in the previous hour; none reach the rule's 5-failure line." loading="lazy">
+      <figcaption>Why rules fail: takeovers arrive with the right password, so a failed-attempt rule never sees them.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<section id="how">
+  <div class="wrap">
+    <h2>How it works</h2>
+    <p class="sub">An offline pipeline that builds and judges the model, and an online service that applies it. The only bridge between them is the promoted model and its thresholds.</p>
+    <pre><code>Offline (DuckDB)                                   Online (FastAPI)
+RBA CSV → Parquet → features.sql ─┐                replay.py → POST /score
+                                  ├→ baselines     state.py (online features,
+                                  ├→ reputation      held to the SQL by
+                                  ├→ XGBoost         a parity test)
+                                  └→ calibration      → score, action, top 3 reasons
+                                     + cost-model         ↓
+                                       thresholds    SQLite decision log
+                                          │               ↓
+                                          └─ MLflow ─→ Streamlit dashboard → analyst labels
+                                             registry      ↑
+                                                    LLM narrator + SQL agent</code></pre>
+
+    <div class="grid2">
+      <div class="card">
+        <h3>Point-in-time features</h3>
+        <p>39 features in DuckDB SQL: velocity, novelty against the account's own successful logins, population frequencies, IP and subnet activity, a likelihood-ratio score and network takeover reputation. Every feature uses only data from before the login, enforced by a leakage test. Reputation counts a takeover only once it would have been confirmed, 7 days later.</p>
+      </div>
+      <div class="card">
+        <h3>Calibrated model, cost-based thresholds</h3>
+        <p>XGBoost with monotone constraints on takeover history, sigmoid-calibrated. Thresholds come from a cost model (missed takeover 500, OTP 0.5, wrongly blocked user 20), not by hand: CHALLENGE at p ≥ 0.00111, BLOCK at p ≥ 0.28.</p>
+      </div>
+      <div class="card">
+        <h3>Serving</h3>
+        <p>A FastAPI <code>/score</code> endpoint keeps per-account state in memory and returns the score, action, top three TreeSHAP reasons and model version. It fails open after 200 ms. A parity test proves its features identical to the SQL ones.</p>
+      </div>
+      <div class="card">
+        <h3>Operations</h3>
+        <p>An MLflow registry with a champion alias for rollback, PSI drift monitoring on the model output, and a Streamlit dashboard with an alert queue, case view, label buttons and a feedback loop into network reputation.</p>
+      </div>
+    </div>
+
+    <h3>What each layer adds</h3>
+    <div class="tw"><table>
+      <thead><tr><th>Step</th><th class="num">Takeovers in the riskiest 1%</th><th class="num">Outside the main campaign</th></tr></thead>
+      <tbody>
+        <tr><td>Static rule</td><td class="num">0 / 33</td><td class="num">0 / 14</td></tr>
+        <tr><td>Likelihood ratio alone</td><td class="num">22 / 33</td><td class="num">8 / 14</td></tr>
+        <tr><td>User behaviour (19 features)</td><td class="num">23 / 33</td><td class="num">9 / 14</td></tr>
+        <tr><td>+ population frequencies</td><td class="num">30 / 33</td><td class="num">11 / 14</td></tr>
+        <tr><td>+ IP–account graph, likelihood feature, anomaly score</td><td class="num">30 / 33</td><td class="num">11 / 14</td></tr>
+        <tr><td>+ delayed network / IP takeover reputation</td><td class="num">32 / 33</td><td class="num">13 / 14</td></tr>
+        <tr class="hl"><td>Final model (no country features, monotone reputation)</td><td class="num">33 / 33</td><td class="num">14 / 14</td></tr>
+      </tbody>
+    </table></div>
+
+    <figure>
+      <img src="assets/cost_curve.png" alt="Line chart of expected cost per 1,000 logins against the CHALLENGE threshold; the cost model's threshold sits at the bottom of the curve, well below the rule (7.77) and allow-everything (6.26) lines." loading="lazy">
+      <figcaption>Choosing the threshold: expected cost is lowest where the cost model puts it. Shown for the previous champion (cost 1.16); the current champion's curve has the same shape.</figcaption>
+    </figure>
+
+    <h3>Problems found by building the whole system</h3>
+    <div class="tw"><table>
+      <thead><tr><th>Finding</th><th>Fix</th><th>Effect</th></tr></thead>
+      <tbody>
+        <tr><td>Genuine Romanian users challenged at 131× the average rate</td><td>Removed country-reputation features</td><td>Their friction fell from 4.0% to 1.0%; every takeover still in the top 1%</td></tr>
+        <tr><td>Confirming a takeover in the dashboard lowered other scores on the same network</td><td>Monotone constraints on takeover history</td><td>Scores can only rise with history; better on all three seeds</td></tr>
+        <tr><td>"Retraining noise" was really rows loading in a different order</td><td>Ordered the loader</td><td>Same seed is now bit-identical</td></tr>
+        <tr><td>Online and offline features disagreed on float timestamps</td><td>Integer-microsecond timestamps</td><td>Identical on ~382,000 feature values</td></tr>
+      </tbody>
+    </table></div>
+  </div>
+</section>
+
+<section id="redteam">
+  <div class="wrap">
+    <h2>Red team: a blind spot found and fixed</h2>
+    <p class="sub">An LLM wrote five attack campaigns as simulator settings. A deterministic generator turned them into synthetic logins on real accounts, mixed into two real days and scored by the same code the API runs.</p>
+    <p>The previous champion stopped <strong>2 of 300</strong> synthetic takeovers. "New country for this account" counted every earlier attempt, so an attacker's own failed guesses made their location look familiar by the time they got in. The real takeovers in the data almost never fail first, so history could not reveal it.</p>
+    <p>The fix measures novelty against the account's <strong>successful</strong> logins only.</p>
+    <div class="tw"><table>
+      <thead><tr><th>Campaign</th><th class="num">Before</th><th class="num">After</th></tr></thead>
+      <tbody>
+        <tr><td>Noisy credential stuffing from attack-listed networks</td><td class="num">0 / 3</td><td class="num">35 / 51</td></tr>
+        <tr><td>Rented servers abroad at night</td><td class="num">2 / 9</td><td class="num">43 / 47</td></tr>
+        <tr><td>Residential proxies abroad, one failure, hours apart</td><td class="num">0 / 0</td><td class="num">0 / 2</td></tr>
+        <tr><td>Residential proxies in the victim's country</td><td class="num">0 / 0</td><td class="num">0 / 0</td></tr>
+        <tr><td>Victim's own ISP and device, copied</td><td class="num">0 / 0</td><td class="num">0 / 0</td></tr>
+        <tr class="hl"><td>Total of 300 (seed 0 / seed 1)</td><td class="num">2 / 12</td><td class="num">78 / 100</td></tr>
+      </tbody>
+    </table></div>
+    <p>The trade-off: 28 instead of 31 real validation takeovers stopped, at the same friction. It was adopted because the old model could be beaten by any attacker who fails once. Attackers that copy the victim's country, network and device stay invisible to login metadata; that needs MFA or behavioural signals.</p>
+  </div>
+</section>
+
+<section id="genai">
+  <div class="wrap">
+    <h2>GenAI layer</h2>
+    <p class="sub">The LLM never decides ALLOW, CHALLENGE or BLOCK. It explains, answers and attacks; the calibrated model decides. Account IDs and IPs are salted-hashed before anything leaves the machine.</p>
+    <div class="grid2">
+      <div class="card">
+        <h3>Case narrator</h3>
+        <p>Claude Haiku turns each alert's evidence into 4–6 cited claims and a suggested next step. Code removes any claim whose numbers are not in the evidence it cites.</p>
+        <p>On 56 alerts no prompt was tuned on: <strong>93.4% strict / 100% lenient faithfulness, 0 unsupported claims</strong> (AI-judged, blind; human spot-check pending). About $1 per 1,000 alerts.</p>
+      </div>
+      <div class="card">
+        <h3>"Ask the Watchtower" SQL agent</h3>
+        <p>Answers analysts' questions with SQL over a hashed, read-only database: one SELECT, 30 s timeout, 200-row cap, no file access.</p>
+        <p>Scored by comparing result tables: 27/30 before tuning, then 30/30 on the tuned set and 9–10/10 on held-out questions. $0.77 per 1,000 questions.</p>
+      </div>
+    </div>
+    <h3>Prompts evaluated like models</h3>
+    <div class="tw"><table>
+      <thead><tr><th>Narrator prompt</th><th>Alerts</th><th class="num">Strict faithfulness</th><th class="num">Unsupported claims</th><th class="num">Recommendations reasonable</th></tr></thead>
+      <tbody>
+        <tr><td>v3</td><td>100 (dev)</td><td class="num">79.1%</td><td class="num">26</td><td class="num">75%</td></tr>
+        <tr><td>v4</td><td>100 (dev)</td><td class="num">88.8%</td><td class="num">11</td><td class="num">85%</td></tr>
+        <tr><td>v4</td><td>56 (held out)</td><td class="num">91.2%</td><td class="num">5</td><td class="num">84%</td></tr>
+        <tr class="hl"><td>v5 (live)</td><td>56 (held out)</td><td class="num">93.4%</td><td class="num">0</td><td class="num">86%</td></tr>
+      </tbody>
+    </table></div>
+    <p>Each comparison used the same alerts, judges who could not see which version wrote what, and a paired case bootstrap. v3 → v4 gained +9.6 points (CI 6.3–12.8); v4 → v5's strict gain (+2.2) is within noise, but it removed every claim that contradicted the evidence.</p>
+  </div>
+</section>
+
+<section id="status">
+  <div class="wrap">
+    <h2>Status and limits</h2>
+    <div class="grid2">
+      <div class="card">
+        <h3>Progress</h3>
+        <ul class="clean">
+          <li><span class="tag done">Done</span> Data, point-in-time features, leakage test</li>
+          <li><span class="tag done">Done</span> Baselines, model, calibration, cost thresholds</li>
+          <li><span class="tag done">Done</span> Serving, parity, replay, registry, drift</li>
+          <li><span class="tag done">Done</span> Shadow mode, dashboard, write-up</li>
+          <li><span class="tag done">Done</span> Narrator, SQL agent, red team</li>
+          <li><span class="tag todo">Next</span> Human check of AI-judged faithfulness</li>
+          <li><span class="tag todo">Next</span> Agent on a local model vs hosted</li>
+          <li><span class="tag todo">Last</span> One-time test-window evaluation</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>Limits</h3>
+        <ul class="clean">
+          <li>Few positives: 86 training and 33 validation takeovers, most from one Romanian campaign, so intervals are wide.</li>
+          <li>The dataset is synthesised from real logins: no cookies, device fingerprints or MFA outcomes.</li>
+          <li>Attackers who copy a victim's country, ISP and device leave no trace in login metadata.</li>
+          <li>Validation was used for choices; the test window decides.</li>
+        </ul>
+      </div>
+    </div>
+    <h3>Stack</h3>
+    <p>Python 3.11 · DuckDB · Parquet · XGBoost · scikit-learn · SHAP · NetworkX · FastAPI · SQLite · MLflow · Streamlit · Plotly · Docker · Anthropic Claude (Haiku, Sonnet) · Pydantic · pytest (45 tests)</p>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <p>Data: <a href="https://github.com/das-group/rba-dataset">Login Data Set for Risk-Based Authentication</a>, Wiefling et al., licensed <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>. Baseline: Freeman, Jain, Dürmuth, Biggio, Giacinto, "Who Are You? A Statistical Approach to Measuring User Authenticity", NDSS 2016.</p>
+    <p><a href="https://github.com/TazerFlash/DeRiddled-ATO-Detection-Engine">Source code, docs and weekly build logs on GitHub</a></p>
+  </div>
+</footer>
+
+<script>
+(function () {
+  var root = document.documentElement, btn = document.getElementById("theme");
+  try { var saved = localStorage.getItem("theme"); if (saved) root.setAttribute("data-theme", saved); } catch (e) {}
+  btn.addEventListener("click", function () {
+    var dark = root.getAttribute("data-theme") ? root.getAttribute("data-theme") === "dark"
+      : window.matchMedia("(prefers-color-scheme: dark)").matches;
+    var next = dark ? "light" : "dark";
+    root.setAttribute("data-theme", next);
+    try { localStorage.setItem("theme", next); } catch (e) {}
+  });
+})();
+</script>
+</body>
+</html>
