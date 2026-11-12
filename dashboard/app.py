@@ -1,4 +1,9 @@
 """De-Riddled analyst dashboard (Streamlit): overview, alert queue with case view and labelling, label-feedback loop, and monitoring."""
+import json
+import os
+import threading
+from datetime import date
+
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
@@ -7,9 +12,13 @@ import streamlit as st
 
 from deriddled import analyst as sql_agent, narrator
 from deriddled import casework as cw
+from deriddled.config import load_config, path
 from deriddled.ops import OpsStore
 
 st.set_page_config(page_title="De-Riddled", layout="wide")
+DEMO = cw.demo()
+LIMITS = load_config().get("demo", {})
+REPO = "https://github.com/TazerFlash/DeRiddled-ATO-Detection-Engine"
 
 
 @st.cache_resource
@@ -100,6 +109,45 @@ EXAMPLES = ["How many logins were blocked or challenged per day in the decision 
             "What share of logins from known attack IPs had the correct password?"]
 
 
+@st.cache_data
+def saved_answers() -> dict:
+    f = path(load_config()["data"]["models_dir"]).parent / "ops" / "example_answers.json"
+    if not f.exists():
+        return {}
+    out = json.loads(f.read_text(encoding="utf-8"))
+    for r in out.values():
+        res = r.get("final_result")
+        r["final_result"] = None if res is None else pd.DataFrame(res["data"], columns=res["columns"])
+    return out
+
+
+@st.cache_resource
+def usage_lock() -> threading.Lock:
+    return threading.Lock()
+
+
+def take_live_slot() -> str | None:
+    if not os.environ.get("ANTHROPIC_API_KEY"):
+        return "Live questions are switched off in this demo. Pick one of the example questions."
+    used = st.session_state.get("live_used", 0)
+    if used >= LIMITS.get("live_questions_per_session", 3):
+        return "You've used this visit's live questions. The example questions still work."
+    f = path(load_config()["data"]["models_dir"]).parent / "ops" / "live_usage.json"
+    with usage_lock():
+        counts = json.loads(f.read_text()) if f.exists() else {}
+        today = date.today().isoformat()
+        if counts.get(today, 0) >= LIMITS.get("live_questions_per_day", 100):
+            return "Today's live-question budget for the demo is used up. The example questions still work."
+        counts = {today: counts.get(today, 0) + 1}
+        f.write_text(json.dumps(counts))
+    st.session_state["live_used"] = used + 1
+    return None
+
+
+def user_label(user_id) -> str:
+    return f"U-{int(user_id):010x}" if DEMO else str(user_id)
+
+
 @st.cache_resource
 def analyst_con():
     return sql_agent.connect()
@@ -107,6 +155,10 @@ def analyst_con():
 
 k = kpis()
 st.title("De-Riddled: account-takeover alerts")
+if DEMO:
+    st.info(f"**Live demo.** A replayed week of real-time decisions from the account-takeover model. Account IDs, "
+            f"IPs and IP ranges are salted hashes. Labels you add are shared with other visitors and reset when the "
+            f"demo restarts. [Code and method on GitHub]({REPO})")
 st.caption(f"Decision log {k['first'][:16]} → {k['last'][:16]} · model {k['model_version']} · "
            "replayed validation week served by the scoring API")
 
@@ -177,7 +229,7 @@ if page == "Alert queue":
                 st.markdown(f"- {r}")
             st.markdown("**Login**")
             st.table(pd.DataFrame({"": [
-                str(a["event_ts"])[:19], str(a["user_id"]), ", ".join(str(x) for x in (a["city"], a["region"], a["country"]) if pd.notna(x)),
+                str(a["event_ts"])[:19], user_label(a["user_id"]), ", ".join(str(x) for x in (a["city"], a["region"], a["country"]) if pd.notna(x)),
                 f"{a['ip']} (ASN {a['asn']})", f"{a['browser']} on {a['os']} ({a['device_type']})",
                 "yes" if a["login_successful"] else "no"]},
                 index=["Time", "User", "Location", "IP / network", "Browser", "Password correct"]))
@@ -194,7 +246,9 @@ if page == "Alert queue":
 
         st.markdown("**AI case summary** (Claude Haiku · hashed IDs only · every claim cites evidence)")
         summary = narrator.cached(int(a["login_id"]), a["model_version"])
-        if summary is None and st.button("Write summary (~$0.001)"):
+        if summary is None and DEMO:
+            st.caption("No saved summary for this alert in the demo.")
+        elif summary is None and st.button("Write summary (~$0.001)"):
             with st.spinner("Writing summary…"):
                 try:
                     summary = narrator.summarize_alert(a)
@@ -279,16 +333,28 @@ if page == "Ask the data":
     st.subheader("Ask the data (SQL analyst agent)")
     st.caption("Claude Haiku writes read-only DuckDB SQL over hashed logins (Feb – 14 Sep 2020) and the decision log. "
                "Single SELECT only, 200-row cap, 30 s timeout. Held-out accuracy 9/10, about $0.001 per question.")
-    pick = st.selectbox("Example", ["(type your own)"] + EXAMPLES)
+    saved = saved_answers() if DEMO else {}
+    if DEMO:
+        st.caption(f"Example questions show answers the agent gave earlier, instantly. You can also ask "
+                   f"{LIMITS.get('live_questions_per_session', 3)} questions of your own per visit, answered live.")
+    pick = st.selectbox("Example", ["(type your own)"] + (list(saved) if saved else EXAMPLES))
     with st.form("ask"):
-        q = st.text_area("Question", value="" if pick == "(type your own)" else pick, height=80)
+        q = st.text_area("Question", value="" if pick == "(type your own)" else pick, height=80,
+                         max_chars=LIMITS.get("max_question_chars") if DEMO else None)
         go_ask = st.form_submit_button("Ask", type="primary")
     if go_ask and q.strip():
-        with st.spinner("Querying…"):
-            try:
-                st.session_state["answer"] = sql_agent.ask(q.strip(), con=analyst_con())
-            except Exception as exc:
-                st.error(f"Agent failed: {type(exc).__name__}: {str(exc)[:200]}")
+        if q.strip() in saved:
+            st.session_state["answer"] = {**saved[q.strip()], "saved": True}
+        else:
+            blocked = take_live_slot() if DEMO else None
+            if blocked:
+                st.warning(blocked)
+            else:
+                with st.spinner("Querying…"):
+                    try:
+                        st.session_state["answer"] = sql_agent.ask(q.strip(), con=analyst_con())
+                    except Exception as exc:
+                        st.error(f"Agent failed: {type(exc).__name__}: {str(exc)[:200]}")
     r = st.session_state.get("answer")
     if r:
         st.markdown(f"**Q:** {r['question']}")
@@ -303,5 +369,5 @@ if page == "Ask the data":
             for s in r["steps"]:
                 st.markdown(f"**{s['tool']}** · {s['error'] or str(s.get('rows', '')) + ' rows'} · {s['seconds']}s")
                 st.code(s.get("sql") or str(s["input"]), language="sql" if s.get("sql") else None)
-        st.caption(f"{r['model']} · {r['input_tokens']:,} in / {r['output_tokens']:,} out tokens · "
-                   f"${r['cost_usd']:.4f} · {r['seconds']}s")
+        st.caption(f"{'Saved answer · ' if r.get('saved') else ''}{r['model']} · {r['input_tokens']:,} in / "
+                   f"{r['output_tokens']:,} out tokens · ${r['cost_usd']:.4f} · {r['seconds']}s")

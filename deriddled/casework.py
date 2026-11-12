@@ -14,6 +14,10 @@ REPUTATION_KEYS = {"asn": ("asn_ato_prior", "asn_ato_rate"), "subnet": ("subnet_
                    "ip": ("ip_ato_prior", "ip_ato_rate")}
 
 
+def demo() -> bool:
+    return bool(load_config().get("demo", {}).get("enabled"))
+
+
 def _ops() -> sqlite3.Connection:
     return sqlite3.connect(path(load_config()["ops"]["sqlite_path"]))
 
@@ -61,9 +65,10 @@ def _months(ts: pd.Series) -> str:
 def login_details(alert_df: pd.DataFrame) -> pd.DataFrame:
     src = path(load_config()["data"]["logins_dir"]).as_posix()
     ids = ", ".join(str(int(i)) for i in alert_df["login_id"])
+    subnet = "subnet" if demo() else "regexp_extract(ip, '^(\\d+\\.\\d+\\.\\d+)\\.', 1) AS subnet"
     return connect().execute(f"""
         SELECT login_id, ip, asn, region, city, browser, os, device_type, login_successful, is_ato, is_attack_ip,
-               regexp_extract(ip, '^(\\d+\\.\\d+\\.\\d+)\\.', 1) AS subnet
+               {subnet}
         FROM read_parquet('{src}/**/*.parquet', hive_partitioning = true)
         WHERE month IN ({_months(alert_df['event_ts'])}) AND login_id IN ({ids})
     """).df()
@@ -87,6 +92,9 @@ def _split_of(ts: pd.Timestamp) -> str | None:
 
 
 def alert_features(alert_df: pd.DataFrame) -> pd.DataFrame:
+    if demo():
+        f = pd.read_parquet(path("data/demo/alert_features.parquet"))
+        return f[f["login_id"].isin(alert_df["login_id"])].reset_index(drop=True)
     parts = []
     for split, group in alert_df.groupby(alert_df["event_ts"].map(_split_of)):
         parts.append(load("ato", split, ids=group["login_id"].tolist()))
@@ -126,6 +134,8 @@ def psi() -> pd.DataFrame | None:
 
 
 def registry_versions() -> pd.DataFrame:
+    if demo():
+        return pd.read_csv(path(load_config()["data"]["models_dir"]).parent / "ops" / "registry_versions.csv")
     from deriddled.registry import setup
     client = setup()
     rows = []

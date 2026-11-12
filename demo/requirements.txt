@@ -1,0 +1,15 @@
+anthropic==2.7.0
+duckdb==2.0.0
+huggingface_hub==2.4.0
+matplotlib==3.11.2
+numpy==2.4.6
+pandas==3.1.0
+plotly==7.1.0
+pyarrow==25.0.1
+pycountry==26.2.16
+pydantic==2.14.2
+python-dotenv==1.2.4
+pyyaml==6.0.3
+scikit-learn==1.9.1
+streamlit==1.67.0
+xgboost==3.2.0

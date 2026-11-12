@@ -1,10 +1,11 @@
-"""Load config.yaml, resolve repo paths, and open DuckDB with the configured memory and spill limits."""
+"""Load config.yaml, resolve paths against the repo (or DERIDDLED_ROOT, used by the hosted demo), and open DuckDB with the configured memory and spill limits."""
+import os
 from pathlib import Path
 
 import duckdb
 import yaml
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(os.environ.get("DERIDDLED_ROOT") or Path(__file__).resolve().parent.parent)
 
 
 def load_config() -> dict:

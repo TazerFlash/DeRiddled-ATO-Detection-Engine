@@ -22,3 +22,6 @@ __pycache__/
 
 # Local Claude app config
 .claude/
+
+# Staged Hugging Face demo (built by deriddled.demo_bundle)
+demo_space/

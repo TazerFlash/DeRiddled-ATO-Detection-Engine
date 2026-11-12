@@ -2,6 +2,8 @@
 
 **Every impostor leaves a riddle in the logs.** De-Riddled scores every login attempt for account-takeover (ATO) risk and returns **ALLOW**, **CHALLENGE** (OTP) or **BLOCK** in under 200 ms, with the top 3 reasons behind each decision.
 
+**[Project page](https://tazerflash.github.io/DeRiddled-ATO-Detection-Engine/)**
+
 It is built on 31M real-world-derived logins from the public [RBA dataset](https://github.com/das-group/rba-dataset), compared honestly against rule and statistical baselines, served by a real-time API, and paired with a GenAI layer that briefs analysts, answers their questions and red-teams the model.
 
 ## The result
@@ -170,6 +172,9 @@ python -m mlflow ui --backend-store-uri sqlite:///data/ops/mlflow.db
 
 ### Dashboard
 
+A public demo runs on Streamlit Community Cloud from `demo/streamlit_app.py`. On start it downloads a hashed data bundle from the [`TazerFlash/de-riddled-demo-data`](https://huggingface.co/datasets/TazerFlash/de-riddled-demo-data) dataset on Hugging Face: the replayed week's decisions, the 156 alerts and their account histories, with every account ID, IP and IP range salted-hashed. Case summaries are pre-written, 10 example questions have saved answers, and visitors can ask 3 questions of their own per visit (100 per day in total). Rebuild and republish the bundle with `python -m deriddled.demo_bundle all` and `python -m deriddled.demo_bundle publish`.
+
+
 | Page | What it shows |
 | --- | --- |
 | Overview | Logins scored, challenge and block rates, latency, alerts per day, shadow-mode table |
@@ -244,8 +249,10 @@ deriddled/
   redteam.py           LLM-written attack scenarios, generator, recall per scenario
   harden.py            red-team fix: train, compare and calibrate
   writeup_figures.py   figures for the write-up
+  demo_bundle.py       hashed demo bundle: build, record example answers, publish to Hugging Face
 replay/replay.py       time-ordered event stream into the API
 dashboard/app.py       Streamlit analyst dashboard
+demo/                  Streamlit Community Cloud entry point and requirements for the live demo
 notebooks/01_eda.ipynb exploratory analysis
 docs/                  results write-ups, figures, portfolio write-up and walkthrough
 eval/                  analyst questions, red-team scenarios, narrator labelling sheets
