@@ -49,4 +49,21 @@ One request (of 503,676) took 2.96 s client-side with normal server scoring time
 
 Same full week, maximum speed: 413.1 /s; client p50 / p95 / p99 2.4 / 3.2 / 4.0 ms, **max 42 ms**; server p95 1.35 ms; 0 fail-opens; 503,501 ALLOW / 172 CHALLENGE / 3 BLOCK. The multi-second outlier is gone.
 
-**Gate: passed** (p95 3.3 ms vs < 200 ms, 0 fail-opens, decisions identical to the offline policy).
+## Current champion E (`ato_xgb_ok`)
+
+Same full week, maximum speed, after `POST /warm_start` (93 s):
+
+| | D `ato_xgb_mono` | **E `ato_xgb_ok`** |
+| --- | --- | --- |
+| Throughput | 413.1 /s | **348.9 /s** |
+| Client p50 / p95 / p99 | 2.4 / 3.2 / 4.0 ms | **2.6 / 5.3 / 6.6 ms** |
+| Server p50 / p95 / p99 | – / 1.35 / – ms | **1.0 / 2.3 / 2.8 ms** |
+| Client max | 42 ms | 226 ms (one request) |
+| Fail-opens | 0 | **0** |
+| Actions | 503,501 ALLOW / 172 CHALLENGE / 3 BLOCK | 503,520 ALLOW / 153 CHALLENGE / 3 BLOCK |
+
+E keeps a second set of per-user counters (successful logins only) and computes six more features, so scoring is about 1 ms slower at p95. It is still about 90× inside the 200 ms budget. Throughput fell from 413 to 349 logins/s for the same reason, and because the second half of the week ran slower (400/s for the first 400k events, then 349/s overall) as state grew.
+
+Online = offline: on all 307,562 real-account logins in the week, the API's decisions match the offline policy exactly. The parity test covers the new success-only features (0 mismatches on 15,689 logins in a busy 6-hour window).
+
+**Gate: passed** (client p95 5.3 ms vs < 200 ms, 0 fail-opens, decisions identical to the offline policy).
