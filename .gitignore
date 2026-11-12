@@ -25,3 +25,6 @@ __pycache__/
 
 # Staged Hugging Face demo (built by deriddled.demo_bundle)
 demo_space/
+
+# Personal build logs (kept locally only)
+work logs/

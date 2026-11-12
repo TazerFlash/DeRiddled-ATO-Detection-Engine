@@ -257,7 +257,6 @@ notebooks/01_eda.ipynb exploratory analysis
 docs/                  results write-ups, figures, portfolio write-up and walkthrough
 eval/                  analyst questions, red-team scenarios, narrator labelling sheets
 tests/                 leakage, likelihood, reputation, parity, API, narrator, analyst and red-team tests
-work logs/             a detailed log for each week of the build
 Dockerfile, docker-compose.yml
 data/                  local storage (git-ignored)
 ```
