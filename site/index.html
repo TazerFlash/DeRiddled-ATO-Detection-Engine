@@ -97,6 +97,7 @@ footer { padding: 36px 0 56px; color: var(--muted); font-size: 14px; border-top:
     <a class="l opt" href="#redteam">Red team</a>
     <a class="l opt" href="#genai">GenAI</a>
     <a class="l opt" href="#status">Status</a>
+    <a class="l" href="https://tazerflash-deriddled.streamlit.app/">Live demo</a>
     <a class="l" href="https://github.com/TazerFlash/DeRiddled-ATO-Detection-Engine">GitHub</a>
     <button id="theme" type="button" aria-label="Toggle colour theme">Theme</button>
   </div>
@@ -108,7 +109,8 @@ footer { padding: 36px 0 56px; color: var(--muted); font-size: 14px; border-top:
     <h1>Every impostor leaves a riddle in the logs.</h1>
     <p class="lede">De-Riddled scores every login attempt for account-takeover risk and returns <strong>ALLOW</strong>, <strong>CHALLENGE</strong> (one-time code) or <strong>BLOCK</strong> in a few milliseconds, with the top three reasons. Built on 31 million logins, compared honestly against rules and statistics, served by a real API, and paired with a GenAI layer that briefs analysts, answers their questions and attacks the model.</p>
     <div class="cta">
-      <a class="btn primary" href="https://github.com/TazerFlash/DeRiddled-ATO-Detection-Engine">View the code</a>
+      <a class="btn primary" href="https://tazerflash-deriddled.streamlit.app/">Try the live dashboard</a>
+      <a class="btn" href="https://github.com/TazerFlash/DeRiddled-ATO-Detection-Engine">View the code</a>
       <a class="btn" href="#results">See the results</a>
     </div>
   </div>
@@ -304,6 +306,7 @@ RBA CSV → Parquet → features.sql ─┐                replay.py → POST /s
   <div class="wrap">
     <p>Data: <a href="https://github.com/das-group/rba-dataset">Login Data Set for Risk-Based Authentication</a>, Wiefling et al., licensed <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>. Baseline: Freeman, Jain, Dürmuth, Biggio, Giacinto, "Who Are You? A Statistical Approach to Measuring User Authenticity", NDSS 2016.</p>
     <p><a href="https://github.com/TazerFlash/DeRiddled-ATO-Detection-Engine">Source code, docs and weekly build logs on GitHub</a></p>
+    <p><a href="https://tazerflash-deriddled.streamlit.app/">Live analyst dashboard</a> (hashed demo data). If nobody has used it for a while it takes about a minute to wake up.</p>
   </div>
 </footer>
 
