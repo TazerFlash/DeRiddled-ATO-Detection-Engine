@@ -1,0 +1,71 @@
+- id: x01
+  tier: easy
+  question: How many login attempts came from Norway (country code NO) on 2020-09-10?
+  gold: SELECT COUNT(*) AS attempts FROM logins WHERE country = 'NO' AND day = DATE '2020-09-10'
+
+- id: x02
+  tier: easy
+  question: Which ASN had the most login attempts in July 2020, and how many attempts did it have?
+  gold: |
+    SELECT asn, COUNT(*) AS attempts FROM logins WHERE day BETWEEN DATE '2020-07-01' AND DATE '2020-07-31'
+    GROUP BY asn ORDER BY attempts DESC LIMIT 1
+
+- id: x03
+  tier: medium
+  question: What percentage of login attempts from known attack IPs were successful? Give a percentage from 0 to 100 rounded to 1 decimal.
+  gold: SELECT ROUND(100 * AVG(login_successful::INT), 1) AS success_pct FROM logins WHERE is_attack_ip
+  tol: 0.051
+
+- id: x04
+  tier: medium
+  question: For each device type, how many distinct accounts made at least one login attempt last week? Ignore attempts with no device type. Return the device type and the number of accounts.
+  gold: |
+    SELECT device_type, COUNT(DISTINCT user_hash) AS accounts FROM logins
+    WHERE day BETWEEN DATE '2020-09-08' AND DATE '2020-09-14' AND device_type IS NOT NULL GROUP BY device_type
+
+- id: x05
+  tier: medium
+  question: On which day did the model make the most CHALLENGE decisions, and how many did it make that day?
+  gold: |
+    SELECT CAST(event_ts AS DATE) AS day, COUNT(*) AS challenges FROM decisions
+    WHERE action = 'CHALLENGE' GROUP BY day ORDER BY challenges DESC LIMIT 1
+
+- id: x06
+  tier: medium
+  question: How many accounts had more than 20 failed login attempts between 2020-09-01 and 2020-09-14?
+  gold: |
+    SELECT COUNT(*) AS accounts FROM (
+      SELECT user_hash FROM logins WHERE day BETWEEN DATE '2020-09-01' AND DATE '2020-09-14' AND NOT login_successful
+      GROUP BY user_hash HAVING COUNT(*) > 20)
+
+- id: x07
+  tier: hard
+  question: For the logins the model challenged (CHALLENGE only), what is the median number of earlier login attempts the same account had made strictly before that login? Round to 1 decimal.
+  gold: |
+    WITH c AS (SELECT login_id, user_hash, event_ts FROM decisions WHERE action = 'CHALLENGE'),
+    n AS (SELECT c.login_id, COUNT(l.login_id) AS earlier FROM c LEFT JOIN logins l
+          ON l.user_hash = c.user_hash AND l.ts < c.event_ts GROUP BY c.login_id)
+    SELECT ROUND(MEDIAN(earlier), 1) AS median_earlier FROM n
+  tol: 0.051
+
+- id: x08
+  tier: hard
+  question: Among confirmed takeover logins that came from known attack IPs, which country appears most often, and how many such logins does it have?
+  gold: |
+    SELECT country, COUNT(*) AS takeovers FROM logins WHERE is_ato AND is_attack_ip
+    GROUP BY country ORDER BY takeovers DESC LIMIT 1
+
+- id: x09
+  tier: hard
+  question: How many accounts made login attempts from 3 or more different ASNs on 2020-09-14?
+  gold: |
+    SELECT COUNT(*) AS accounts FROM (
+      SELECT user_hash FROM logins WHERE day = DATE '2020-09-14' GROUP BY user_hash HAVING COUNT(DISTINCT asn) >= 3)
+
+- id: x10
+  tier: hard
+  question: For each decision action, what percentage of those logins were successful? Return the action and the percentage from 0 to 100 rounded to 1 decimal.
+  gold: |
+    SELECT d.action, ROUND(100 * AVG(l.login_successful::INT), 1) AS success_pct
+    FROM decisions d JOIN logins l USING (login_id) GROUP BY d.action
+  tol: 0.051

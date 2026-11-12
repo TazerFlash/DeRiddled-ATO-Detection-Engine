@@ -1,0 +1,24 @@
+# Junctions to folders outside OneDrive (see README)
+data/
+.venv/
+
+# Local stores, in case any land in the repo
+mlruns/
+mlartifacts/
+*.duckdb
+*.duckdb.wal
+*.db
+*.db-wal
+*.db-shm
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Secrets
+.env
+
+# Local Claude app config
+.claude/

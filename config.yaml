@@ -1,0 +1,74 @@
+data:
+  raw_csv: data/raw/rba-dataset.csv
+  logins_dir: data/parquet/logins
+  sample_dir: data/parquet/sample
+  features_dir: data/features/logins
+  features_sample_dir: data/features/sample
+  likelihood_dir: data/features/likelihood
+  likelihood_sample_dir: data/features/likelihood_sample
+  models_dir: data/models
+  reputation_dir: data/features/reputation
+  reputation_sample_dir: data/features/reputation_sample
+
+reputation:
+  label_delay_days: 7
+  m: 1000
+  p0: 0.00001
+  sample_frac_users: 0.10
+
+non_accounts:
+  rule:
+    min_logins: 1000
+    max_success_rate: 0.01
+  known_ids:
+    - -4324475583306591935
+    - 6998943612473066845
+    - -8897190181838729192
+    - -3550173317628772375
+    - 6665318783057062876
+
+duckdb:
+  database: data/deriddled.duckdb
+  memory_limit: 8GB
+  temp_directory: data/duckdb_tmp
+  threads: null
+
+ops:
+  sqlite_path: data/ops/ops.db
+
+mlflow:
+  tracking_uri: sqlite:///data/ops/mlflow.db
+  artifact_root: data/ops/mlartifacts
+
+splits:
+  ato:
+    label_end: "2020-11-24"
+    train: ["2020-02-03", "2020-08-01"]
+    valid: ["2020-08-01", "2020-10-01"]
+    test:  ["2020-10-01", "2020-11-24"]
+  attack_ip:
+    train: ["2020-02-03", "2020-11-01"]
+    valid: ["2020-11-01", "2021-01-01"]
+    test:  ["2021-01-01", "2021-03-01"]
+
+models:
+  ato: ato_xgb_ok
+  attack_ip: attack_ip_xgb
+
+rule_baseline:
+  k: 5
+  ato_campaign_country: RO
+
+costs:
+  c_miss: 500
+  c_otp: 0.5
+  c_block: 20
+  otp_stop_rate: 0.9
+
+thresholds:
+  challenge: null
+  block: null
+
+serving:
+  timeout_ms: 200
+  new_user_min_logins: 3

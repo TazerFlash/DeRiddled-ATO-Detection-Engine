@@ -1,0 +1,193 @@
+- id: e01
+  tier: easy
+  question: How many login attempts are in the logins table?
+  gold: SELECT COUNT(*) AS attempts FROM logins
+
+- id: e02
+  tier: easy
+  question: How many distinct accounts had at least one successful login on 2020-09-14?
+  gold: SELECT COUNT(DISTINCT user_hash) AS accounts FROM logins WHERE day = DATE '2020-09-14' AND login_successful
+
+- id: e03
+  tier: easy
+  question: How many login attempts are confirmed account takeovers?
+  gold: SELECT COUNT(*) AS takeovers FROM logins WHERE is_ato
+
+- id: e04
+  tier: easy
+  question: What percentage of all login attempts were successful? Give a percentage from 0 to 100 rounded to 2 decimals.
+  gold: SELECT ROUND(100 * AVG(login_successful::INT), 2) AS success_pct FROM logins
+  tol: 0.0051
+
+- id: e05
+  tier: easy
+  question: How many logins did the model BLOCK in the decisions table?
+  gold: SELECT COUNT(*) AS blocked FROM decisions WHERE action = 'BLOCK'
+
+- id: e06
+  tier: easy
+  question: Which 5 countries had the most login attempts last week? Return the country code and the number of attempts.
+  gold: |
+    SELECT country, COUNT(*) AS attempts FROM logins
+    WHERE day BETWEEN DATE '2020-09-08' AND DATE '2020-09-14'
+    GROUP BY country ORDER BY attempts DESC LIMIT 5
+
+- id: e07
+  tier: easy
+  question: How many distinct networks (ASNs) appear in the logins table?
+  gold: SELECT COUNT(DISTINCT asn) AS asns FROM logins
+
+- id: e08
+  tier: easy
+  question: What was the median scoring latency in milliseconds in the decisions table? Round to 2 decimals.
+  gold: SELECT ROUND(MEDIAN(latency_ms), 2) AS median_ms FROM decisions
+  tol: 0.0051
+
+- id: e09
+  tier: easy
+  question: How many login attempts came from known attack IPs in August 2020?
+  gold: SELECT COUNT(*) AS attempts FROM logins WHERE is_attack_ip AND day BETWEEN DATE '2020-08-01' AND DATE '2020-08-31'
+
+- id: e10
+  tier: easy
+  question: Which device type is most common among confirmed takeover logins? Return the device type and its number of takeover logins.
+  gold: SELECT device_type, COUNT(*) AS takeovers FROM logins WHERE is_ato GROUP BY device_type ORDER BY takeovers DESC LIMIT 1
+
+- id: m01
+  tier: medium
+  question: Which ASNs touched more than 50 accounts yesterday? Return each ASN and its number of accounts.
+  gold: |
+    SELECT asn, COUNT(DISTINCT user_hash) AS accounts FROM logins
+    WHERE day = DATE '2020-09-14' GROUP BY asn HAVING COUNT(DISTINCT user_hash) > 50
+
+- id: m02
+  tier: medium
+  question: How many confirmed takeovers were there in each calendar month? Return the month as text in the form YYYY-MM and the count.
+  gold: SELECT strftime(ts, '%Y-%m') AS month, COUNT(*) AS takeovers FROM logins WHERE is_ato GROUP BY month
+
+- id: m03
+  tier: medium
+  question: Which 10 ASNs had the most login attempts from known attack IPs last week? Return the ASN and the number of attempts.
+  gold: |
+    SELECT asn, COUNT(*) AS attempts FROM logins
+    WHERE is_attack_ip AND day BETWEEN DATE '2020-09-08' AND DATE '2020-09-14'
+    GROUP BY asn ORDER BY attempts DESC LIMIT 10
+
+- id: m04
+  tier: medium
+  question: For each day in the decisions table, how many CHALLENGE and how many BLOCK decisions were made? Return one row per day and action that occurred, with the date, the action and the count.
+  gold: |
+    SELECT CAST(event_ts AS DATE) AS day, action, COUNT(*) AS decisions FROM decisions
+    WHERE action IN ('CHALLENGE', 'BLOCK') GROUP BY day, action
+
+- id: m05
+  tier: medium
+  question: Among countries with at least 10,000 login attempts, which have a login success rate below 50%? Return the country code and the success rate as a percentage rounded to 1 decimal.
+  gold: |
+    SELECT country, ROUND(100 * AVG(login_successful::INT), 1) AS success_pct FROM logins
+    GROUP BY country HAVING COUNT(*) >= 10000 AND AVG(login_successful::INT) < 0.5
+  tol: 0.051
+
+- id: m06
+  tier: medium
+  question: How many accounts logged in (successfully or not) from more than 3 different countries?
+  gold: |
+    SELECT COUNT(*) AS accounts FROM (
+      SELECT user_hash FROM logins GROUP BY user_hash HAVING COUNT(DISTINCT country) > 3)
+
+- id: m07
+  tier: medium
+  question: How many distinct IP addresses were used by more than 100 different accounts?
+  gold: |
+    SELECT COUNT(*) AS ips FROM (
+      SELECT ip_hash FROM logins GROUP BY ip_hash HAVING COUNT(DISTINCT user_hash) > 100)
+
+- id: m08
+  tier: medium
+  question: In which hour of the day (0-23) were there the most login attempts on 2020-09-14, and how many were there?
+  gold: |
+    SELECT hour(ts) AS hour, COUNT(*) AS attempts FROM logins
+    WHERE day = DATE '2020-09-14' GROUP BY hour ORDER BY attempts DESC LIMIT 1
+
+- id: m09
+  tier: medium
+  question: Which countries have at least 6 confirmed takeover logins? Return the country code and the number of takeovers.
+  gold: SELECT country, COUNT(*) AS takeovers FROM logins WHERE is_ato GROUP BY country HAVING COUNT(*) >= 6
+
+- id: m10
+  tier: medium
+  question: How many distinct accounts had at least one confirmed takeover login?
+  gold: SELECT COUNT(DISTINCT user_hash) AS accounts FROM logins WHERE is_ato
+
+- id: m11
+  tier: medium
+  question: What percentage of decisions were CHALLENGE or BLOCK? Give a percentage from 0 to 100 rounded to 3 decimals.
+  gold: SELECT ROUND(100 * AVG((action != 'ALLOW')::INT), 3) AS flagged_pct FROM decisions
+  tol: 0.00051
+
+- id: m12
+  tier: medium
+  question: Which browser version string has the most confirmed takeover logins? Return the browser and its number of takeovers.
+  gold: SELECT browser, COUNT(*) AS takeovers FROM logins WHERE is_ato GROUP BY browser ORDER BY takeovers DESC LIMIT 1
+
+- id: h01
+  tier: hard
+  question: List every login the model blocked, with its country, ASN and score, highest score first.
+  gold: |
+    SELECT l.country, l.asn, d.score FROM decisions d JOIN logins l USING (login_id)
+    WHERE d.action = 'BLOCK' ORDER BY d.score DESC
+
+- id: h02
+  tier: hard
+  question: Of the confirmed takeover logins in the decisions week, how many did the model ALLOW, CHALLENGE and BLOCK? Return one row per action that occurred, with the action and the count.
+  gold: |
+    SELECT d.action, COUNT(*) AS takeovers FROM decisions d JOIN logins l USING (login_id)
+    WHERE l.is_ato GROUP BY d.action
+
+- id: h03
+  tier: hard
+  question: What was the average number of login attempts per account in August 2020, counting only accounts with at least one attempt that month? Round to 2 decimals.
+  gold: |
+    SELECT ROUND(COUNT(*) / COUNT(DISTINCT user_hash), 2) AS attempts_per_account FROM logins
+    WHERE day BETWEEN DATE '2020-08-01' AND DATE '2020-08-31'
+  tol: 0.0051
+
+- id: h04
+  tier: hard
+  question: Take the account behind the single highest-scoring decision. From how many distinct countries had that account logged in strictly before that login?
+  gold: |
+    WITH top AS (SELECT user_hash, event_ts FROM decisions ORDER BY score DESC, login_id LIMIT 1)
+    SELECT COUNT(DISTINCT l.country) AS countries FROM logins l JOIN top t USING (user_hash) WHERE l.ts < t.event_ts
+
+- id: h05
+  tier: hard
+  question: Which 5 IP ranges (subnet_hash) were used by the most distinct accounts between 2020-09-01 and 2020-09-14? Return the subnet hash and the number of accounts.
+  gold: |
+    SELECT subnet_hash, COUNT(DISTINCT user_hash) AS accounts FROM logins
+    WHERE day BETWEEN DATE '2020-09-01' AND DATE '2020-09-14'
+    GROUP BY subnet_hash ORDER BY accounts DESC LIMIT 5
+
+- id: h06
+  tier: hard
+  question: For each ASN with at least 5 confirmed takeover logins, give the ASN, its number of takeovers, and the percentage of all its login attempts that came from known attack IPs (0 to 100, rounded to 1 decimal).
+  gold: |
+    SELECT asn, SUM(is_ato::INT) AS takeovers, ROUND(100 * AVG(is_attack_ip::INT), 1) AS attack_ip_pct
+    FROM logins GROUP BY asn HAVING SUM(is_ato::INT) >= 5
+  tol: 0.051
+
+- id: h07
+  tier: hard
+  question: How many login attempts were there from 2020-09-08 to 2020-09-14 compared with 2020-09-01 to 2020-09-07, and what was the percentage change from the earlier week to the later one, rounded to 1 decimal? Return one row with the later week's count, the earlier week's count and the change.
+  gold: |
+    WITH w AS (SELECT COUNT(*) FILTER (WHERE day BETWEEN DATE '2020-09-08' AND DATE '2020-09-14') AS later_week,
+                      COUNT(*) FILTER (WHERE day BETWEEN DATE '2020-09-01' AND DATE '2020-09-07') AS earlier_week
+               FROM logins)
+    SELECT later_week, earlier_week, ROUND(100 * (later_week - earlier_week) / earlier_week, 1) AS pct_change FROM w
+  tol: 0.051
+
+- id: h08
+  tier: hard
+  question: How many accounts made their first login attempt in the data during September 2020?
+  gold: |
+    SELECT COUNT(*) AS accounts FROM (
+      SELECT user_hash FROM logins GROUP BY user_hash HAVING MIN(day) >= DATE '2020-09-01')
